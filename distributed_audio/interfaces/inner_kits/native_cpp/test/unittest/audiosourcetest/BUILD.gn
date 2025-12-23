@@ -1,0 +1,70 @@
+# Copyright (c) 2022 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/test.gni")
+import("../../../../../../distributedaudio.gni")
+
+module_out_path =
+    "distributed_audio/distributed_audio/interfaces/audio_source_test"
+
+config("module_private_config") {
+  visibility = [ ":*" ]
+
+  include_dirs = [
+    "./include",
+    "${common_path}/include",
+    "${interfaces_path}/inner_kits/native_cpp/audio_source/include",
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/include",
+    "${services_path}/common/audiodata/include",
+    "${services_path}/common/audioparam",
+    "${services_path}/common/utils/include",
+  ]
+}
+
+## UnitTest AudioSourceTest
+ohos_unittest("AudioSourceTest") {
+  module_out_path = module_out_path
+
+  sources = [
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/src/daudio_hdf_operate_test.cpp",
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/src/daudio_ipc_callback_test.cpp",
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/src/daudio_source_handler_test.cpp",
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/src/daudio_source_proxy_test.cpp",
+    "${interfaces_path}/inner_kits/native_cpp/test/unittest/audiosourcetest/src/mock_hdfoperate_device_manager.cpp",
+  ]
+
+  configs = [ ":module_private_config" ]
+
+  deps = [ "${interfaces_path}/inner_kits/native_cpp/audio_source:distributed_audio_source_sdk" ]
+
+  cflags = [ "-Dprivate=public" ]
+
+  external_deps = [
+    "cJSON:cjson",
+    "c_utils:utils",
+    "distributed_hardware_fwk:distributedhardwareutils",
+    "drivers_interface_distributed_audio:libdaudioext_proxy_2.1",
+    "googletest:gmock",
+    "hdf_core:libhdf_ipc_adapter",
+    "hdf_core:libhdi",
+    "hdf_core:libpub_utils",
+    "hilog:libhilog",
+    "ipc:ipc_core",
+    "samgr:samgr_proxy",
+  ]
+}
+
+group("audio_source_test") {
+  testonly = true
+  deps = [ ":AudioSourceTest" ]
+}
