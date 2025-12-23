@@ -1,0 +1,148 @@
+name: Weekly Multi-Repo Sync
+
+on:
+  # 1. 定时触发：北京时间每周日 23:00 (UTC 15:00)
+  schedule:
+    - cron: '0 15 * * 0'
+  # 2. 支持手动触发
+  workflow_dispatch:
+
+jobs:
+  integrate-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 允许脚本提交代码
+
+    steps:
+      - name: Checkout Target Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_PAT }}
+          fetch-depth: 0
+          # 拉取你自己的仓库
+          ref: main  # 确保这里是你个人仓的主分支名 (main 或 master)
+
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      # =========================================================
+      # 任务 1: 同步 distributed_audio (全量)
+      # 源: openharmony/distributedhardware_distributed_audio
+      # =========================================================
+      - name: Sync distributed_audio
+        run: |
+          SRC_URL="https://gitcode.com/openharmony/distributedhardware_distributed_audio.git"
+          DEST_DIR="distributed_audio"
+          TEMP_DIR="temp_dist_cam"
+
+          echo ">>> Cloning $SRC_URL ..."
+          # --depth 1 浅克隆，速度快
+          git clone --depth 1 $SRC_URL $TEMP_DIR
+
+          echo ">>> Syncing to $DEST_DIR ..."
+          mkdir -p $DEST_DIR
+          # rsync 参数说明:
+          # -a: 归档模式 (保留权限、时间戳等)
+          # --delete: 目标目录中多余的文件会被删除 (保持与源一致)
+          # --exclude .git: 不同步 git 版本库文件
+          rsync -a --delete --exclude .git $TEMP_DIR/ $DEST_DIR/
+
+          rm -rf $TEMP_DIR
+
+      # =========================================================
+      # 任务 2: 同步 distributed_fwk (全量)
+      # 源: openharmony/distributedhardware_distributed_hardware_fwk
+      # =========================================================
+      - name: Sync distributed_fwk
+        run: |
+          SRC_URL="https://gitcode.com/openharmony/distributedhardware_distributed_hardware_fwk.git"
+          DEST_DIR="distributed_fwk"
+          TEMP_DIR="temp_dist_fwk"
+
+          echo ">>> Cloning $SRC_URL ..."
+          git clone --depth 1 $SRC_URL $TEMP_DIR
+
+          echo ">>> Syncing to $DEST_DIR ..."
+          mkdir -p $DEST_DIR
+          rsync -a --delete --exclude .git $TEMP_DIR/ $DEST_DIR/
+
+          rm -rf $TEMP_DIR
+
+      # =========================================================
+      # 任务 3: 同步 drivers_interface (部分同步)
+      # 源: openharmony/drivers_interface
+      # 需求: 只保留 audio 和 distributed_audio 两个子文件夹
+      # =========================================================
+      - name: Sync drivers_interface (Partial)
+        run: |
+          SRC_URL="https://gitcode.com/openharmony/drivers_interface.git"
+          DEST_DIR="drivers_interface"
+          TEMP_DIR="temp_drv_iface"
+          
+          echo ">>> Sparse cloning $SRC_URL ..."
+          # 1. 初始化空仓
+          git clone --filter=blob:none --no-checkout $SRC_URL $TEMP_DIR
+          cd $TEMP_DIR
+          
+          # 2. 设置稀疏检出，只拉取指定的两个目录
+          git sparse-checkout init --cone
+          git sparse-checkout set audio distributed_audio
+          git checkout master
+          cd ..
+
+          echo ">>> Syncing specific folders to $DEST_DIR ..."
+          mkdir -p $DEST_DIR
+          
+          # 这里 rsync 会把 temp 目录下的 audio 和 distributed_audio 结构完全复制过去
+          # 注意：如果是 drivers_interface 下原本有其他文件夹，--delete 会把它们删掉，只保留这两个
+          rsync -a --delete --exclude .git $TEMP_DIR/ $DEST_DIR/
+
+          rm -rf $TEMP_DIR
+
+      # =========================================================
+      # 任务 4: 同步 drivers_audio (部分同步 + 目录重构)
+      # 源: openharmony/drivers_peripheral
+      # 需求: 取源仓下的 distributed_audio 文件夹，内容放入 drivers_audio
+      # =========================================================
+      - name: Sync drivers_audio (Partial & Rename)
+        run: |
+          SRC_URL="https://gitcode.com/openharmony/drivers_peripheral.git"
+          DEST_DIR="drivers_audio"
+          SOURCE_SUBFOLDER="distributed_audio"
+          TEMP_DIR="temp_drv_periph"
+
+          echo ">>> Sparse cloning $SRC_URL ..."
+          git clone --filter=blob:none --no-checkout $SRC_URL $TEMP_DIR
+          cd $TEMP_DIR
+          
+          # 只拉取 distributed_audio 文件夹
+          git sparse-checkout init --cone
+          git sparse-checkout set $SOURCE_SUBFOLDER
+          git checkout master
+          cd ..
+
+          echo ">>> Syncing $SOURCE_SUBFOLDER content to $DEST_DIR ..."
+          mkdir -p $DEST_DIR
+          
+          # 注意这里的写法: $TEMP_DIR/$SOURCE_SUBFOLDER/ (带斜杠)
+          # 意思是把 distributed_audio 里面的内容，复制到 drivers_audio 里面
+          rsync -a --delete --exclude .git $TEMP_DIR/$SOURCE_SUBFOLDER/ $DEST_DIR/
+
+          rm -rf $TEMP_DIR
+
+      # =========================================================
+      # 提交变更
+      # =========================================================
+      - name: Commit and Push
+        run: |
+          # 检查是否有文件变化
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Changes detected, committing..."
+            git add .
+            git commit -m "Auto-sync: Update code from OpenHarmony repositories"
+            git push origin HEAD:main
+          else
+            echo "No changes detected."
+          fi
