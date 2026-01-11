@@ -42,6 +42,7 @@ namespace {
 static constexpr uint32_t MAX_AUDIO_STREAM_NUM = 10;
 const std::string STREAM_TYPE_CHANGE = "stream_type_change";
 const std::string STREAM_USAGE_CHANGE = "stream_usage_change";
+const std::string ZONE_ID_CHANGE = "zone_id_change";
 
 struct StreamStatusNoifyResult {
     uint32_t renderId = 0;
@@ -264,8 +265,11 @@ int32_t AudioAdapterInterfaceImpl::DestroyRender(uint32_t renderId)
         audioRender = renderDevs_[renderId].second;
         dhId = renderDevs_[renderId].first;
     }
-    std::lock_guard<std::mutex> callbackLck(extCallbackMtx_);
-    sptr<IDAudioCallback> extSpkCallback(extCallbackMap_[dhId]);
+    sptr<IDAudioCallback> extSpkCallback(nullptr);
+    {
+        std::lock_guard<std::mutex> callbackLck(extCallbackMtx_);
+        extSpkCallback = extCallbackMap_[dhId];
+    }
     if (audioRender == nullptr) {
         DHLOGD("Render has not been created, do not need destroy.");
         return HDF_SUCCESS;
@@ -390,8 +394,11 @@ int32_t AudioAdapterInterfaceImpl::DestroyCapture(uint32_t captureId)
         audioCapture = captureDevs_[captureId].second;
         dhId = captureDevs_[captureId].first;
     }
-    std::lock_guard<std::mutex> callbackLck(extCallbackMtx_);
-    sptr<IDAudioCallback> extMicCallback(extCallbackMap_[dhId]);
+    sptr<IDAudioCallback> extMicCallback(nullptr);
+    {
+        std::lock_guard<std::mutex> callbackLck(extCallbackMtx_);
+        extMicCallback = extCallbackMap_[dhId];
+    }
     if (audioCapture == nullptr) {
         DHLOGD("Capture has not been created, do not need destroy.");
         return HDF_SUCCESS;
@@ -507,6 +514,13 @@ int32_t AudioAdapterInterfaceImpl::SetExtraParams(AudioExtParamKey key, const st
             ret = SetStreamStatusChange(condition, value);
             if (ret != DH_SUCCESS) {
                 DHLOGE("stream status change notify failed.");
+                return HDF_FAILURE;
+            }
+            break;
+        case AudioExtParamKey::AUDIO_EXT_PARAM_KEY_NONE:
+            ret = SetUsualParamChange(condition, value);
+            if (ret != DH_SUCCESS) {
+                DHLOGE("set usual param notify failed.");
                 return HDF_FAILURE;
             }
             break;
@@ -1561,6 +1575,26 @@ bool AudioAdapterInterfaceImpl::GetSpkStatus(const uint32_t streamId)
     return spkStatus_[streamId];
 }
 
+int32_t AudioAdapterInterfaceImpl::SetUsualParamChange(const std::string &condition, const std::string &value)
+{
+    DHLOGD("start SetUsualParamChange, %{public}s-%{public}s", condition.c_str(), value.c_str());
+    DAudioEvent event = {
+        .type = HDF_AUDIO_EVENT_PARAM_UNKNOWN,
+        .content = value
+    };
+    if (condition == ZONE_ID_CHANGE) {
+        event.type = HDF_AUDIO_ZONE_ID_CHANGE;
+    } else {
+        DHLOGE("condition not satisfy.");
+        return ERR_DH_AUDIO_HDF_FAIL;
+    }
+    std::lock_guard<std::mutex> callbackLck(extCallbackMtx_);
+    auto iter = extCallbackMap_.find(sinkDhId_);
+    CHECK_AND_RETURN_RET_LOG(iter == extCallbackMap_.end(), HDF_FAILURE, "can't find callback.");
+    CHECK_AND_RETURN_RET_LOG(iter->second->NotifyEvent(-1, event) != HDF_SUCCESS, HDF_FAILURE,
+        "set usual param change failed.");
+    return DH_SUCCESS;
+}
 } // V1_0
 } // Audio
 } // Distributedaudio
