@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Huawei Device Co., Ltd.
+ * Copyright (c) 2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,29 +13,29 @@
  * limitations under the License.
  */
 
-#ifndef OHOS_DAUDIO_SOURCE_DEV_TEST_H
-#define OHOS_DAUDIO_SOURCE_DEV_TEST_H
+#ifndef OHOS_DISTRIBUTED_HARDWARE_EVENT_HANDLER_FACTORY_H
+#define OHOS_DISTRIBUTED_HARDWARE_EVENT_HANDLER_FACTORY_H
 
-#include <gtest/gtest.h>
+#include <memory>
+#include <mutex>
+#include "event_handler.h"
 
-#include "audio_data.h"
-#include "daudio_constants.h"
-#include "daudio_errorcode.h"
-#define private public
-#include "daudio_source_dev.h"
-#undef private
+#include "single_instance.h"
 
 namespace OHOS {
 namespace DistributedHardware {
-class DAudioSourceDevTest : public testing::Test {
-public:
-    static void SetUpTestCase(void);
-    static void TearDownTestCase(void);
-    void SetUp();
-    void TearDown();
+class EventHandlerFactory {
+DECLARE_SINGLE_INSTANCE(EventHandlerFactory);
 
-    std::shared_ptr<DAudioSourceDev> sourceDev_ = nullptr;
+public:
+    int32_t Init();
+    int32_t UnInit();
+    std::shared_ptr<AppExecFwk::EventHandler> GetEventHandler();
+
+private:
+    std::mutex eventHandlerMutex_;
+    std::shared_ptr<AppExecFwk::EventHandler> eventHandler_;
 };
 } // namespace DistributedHardware
 } // namespace OHOS
-#endif // OHOS_AUDIO_CTRL_TRANSPORT_TEST_H
+#endif // OHOS_DISTRIBUTED_HARDWARE_EVENT_HANDLER_FACTORY_H
