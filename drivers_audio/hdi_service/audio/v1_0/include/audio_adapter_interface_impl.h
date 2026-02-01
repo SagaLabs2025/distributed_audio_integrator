@@ -137,7 +137,7 @@ private:
     inline bool IsIdValid(const uint32_t id);
     bool CheckRendersValid();
     bool CheckCapsValid();
-    bool CheckDevCapability(const AudioDeviceDescriptor &desc);
+    bool CheckDevCapability(const AudioDeviceDescriptor &desc, const AudioSampleAttributes &attrs);
     void SetDumpFlag(bool isRender);
     sptr<IDAudioCallback> MatchStreamCallback(const AudioSampleAttributes &attrs,
         const AudioDeviceDescriptor &desc, int32_t &dhId);
@@ -191,6 +191,7 @@ private:
     std::condition_variable spkWaitCond_;
     std::mutex micWaitMutex_;
     std::condition_variable micWaitCond_;
+    std::mutex renderCallMtx_;
 
     std::mutex spkStatusMutex_;
     std::vector<bool> spkStatus_;
